@@ -1,12 +1,14 @@
 #/bin/bash
 clear
 
-CC='cc -Wall -Wextra -std=c23 -o Tterm'
-COMPILE_FLAGS='-O0 -g3'
-LINK_FLAGS='-lX11'
+set -xe
 
-COMPILE_OPT_FLAGS='-O3 -g0'
-LINK_OPT_FLAGS='-flto'
+CC='cc -Wall -Wextra -std=c23 -o Tterm'
+COMPILE_FLAGS='-march=native -O0 -g3 -fverbose-asm -masm=intel'
+LINK_FLAGS='-Wl,--start-group -lX11 -Wl,--end-group'
+
+COMPILE_OPT_FLAGS='-march=native -Ofast -g0 -ffast-math -s -masm=intel'
+LINK_OPT_FLAGS='-Wl,--start-group -lX11 -Wl,--end-group -flto'
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
