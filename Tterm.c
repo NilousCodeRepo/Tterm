@@ -1,3 +1,5 @@
+//TODO:try GLFW with #define GLFW_NO_API
+
 #define _XOPEN_SOURCE 600
 #define _GNU_SOURCE
 
@@ -6,11 +8,30 @@
 #include <stdlib.h>
 #include <pty.h>
 #include <X11/Xlib.h>
+#include <assert.h>
 
 #define KEY_ESCAPE 9
 
+bool xorg_exists()
+{
+	char* disp_env_var = getenv("DISPLAY");
+	Display* display = XOpenDisplay(display);
+
+	if(disp_env_var == NULL || display == NULL)
+		return false;
+
+	return true;
+}
+
 int term_window()
 {
+	if(!xorg_exists())
+	{
+		assert("FATAL ERROR: X server is NOT running\nor the 'DISPLAY' enviromental variable is not set properly");
+	}
+
+
+#if 0
 	int screen = DefaultScreen(display);
 	
 	XSetWindowAttributes attributes = {
@@ -72,6 +93,7 @@ int term_window()
 		}
 
 	XCloseDisplay(display);//this is enougth, it handles everything
+#endif
 }
 
 
@@ -81,7 +103,7 @@ int main(void)
 
 //open slave device
 	int master_fd = posix_openpt(O_RDWR);//open pseudoterminal master device		
-	int key = unlockpt(master_fd);//needed before creating a slave
+	int key = unlockpt(master_fd);//unlocks master/slave pair
 	int slave_fd = grantpt(master_fd);//the real pseudoterm
 	
 	char buf = *(char*)malloc(sizeof(char)*64);
