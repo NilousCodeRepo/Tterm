@@ -12,11 +12,9 @@
 
 #define KEY_ESCAPE 9
 
-bool xorg_exists()
+bool xorg_exists(Display* display)
 {
 	char* disp_env_var = getenv("DISPLAY");
-	Display* display = XOpenDisplay(display);
-
 	if(disp_env_var == NULL || display == NULL)
 		return false;
 
@@ -25,11 +23,26 @@ bool xorg_exists()
 
 int term_window()
 {
-	if(!xorg_exists())
+	Display* display = XOpenDisplay(NULL);
+	if(!xorg_exists(display))//TODO: check to see if it works
 	{
 		assert("FATAL ERROR: X server is NOT running\nor the 'DISPLAY' enviromental variable is not set properly");
 	}
+	
+	Window focused_display;
+	int current_focus;
 
+	//TODO: check if this works with second monitor
+	Display* focused = (Display*)XGetInputFocus(display, &focused_display, &current_focus);
+
+	Window window = XDefaultScreen(focused);
+	XWindowAttributes window_attr;//SEGFAULTS HERE FOR SURE
+	
+	display = XOpenDisplay((char*)focused);
+
+	Status attr = XGetWindowAttributes(display, window, &window_attr);
+
+	//TODO: SetWindowAttributes and XSelectInput()
 
 #if 0
 	int screen = DefaultScreen(display);
