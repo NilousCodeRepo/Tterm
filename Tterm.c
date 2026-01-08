@@ -10,6 +10,8 @@
 #include <X11/Xlib.h>
 #include <assert.h>
 
+#define UNUSED __attribute__((unused))
+
 //i only check the env var to not cause confusion when actually opening a connection to the server, i hope it is enough, if not, i will resolve.
 bool xorg_exists()
 {
@@ -20,7 +22,6 @@ bool xorg_exists()
 	return true;
 }
 
-//use: XSelectInput() if using XCreateWindow(), with the simple version is automatically set to InputOutput
 void term_window()
 {
 	if(!xorg_exists())//TODO: check to see if it works
@@ -41,50 +42,52 @@ void term_window()
 	unsigned int width = 100;
 	unsigned int height = 100;
 	
-	unsigned long border_width = 1;
-	unsigned long border = 0;
+	unsigned int border_width = 1;
+	
+	unsigned long border_color = 0;
 	unsigned long BG = 0;
 
 	//allocate and initialize memory for window(?) without drawing it
 	Window simple_window = XCreateSimpleWindow(display,ROOT_DEFAULT, x, y, width, height,
-																						 border_width, border, BG);
+																						 border_width, border_color, BG);
 
-	int window_name = XStoreName(display, simple_window, "Tterm");
+	XEvent event = {0};
+	
+	XSelectInput(display,simple_window, KeyPressMask);//specifies the input that i want the window to receive
+
+	UNUSED int window_name = XStoreName(display, simple_window, "Tterm");
 
 	Atom wm_delete_window = XInternAtom(display, "WM_DELETE_WINDOW", False);
 	
-	Status set_atom_protocols = XSetWMProtocols(display, simple_window, &wm_delete_window, 1);
+	UNUSED Status set_atom_protocols = XSetWMProtocols(display, simple_window, &wm_delete_window, 1);
 
 	XMapWindow(display, simple_window);//map window to be drawn
 
-	XEvent event;
+	XSync(display, false);
 
 	int loop = 1;
 	while(loop != 0)
 	{
-
 		XNextEvent(display, &event);
 		switch(event.type)
 		{
 			case KeyPress:
-				if(event.xkey.keycode)
-				{
-					loop = 0;
-				}
+			{
+				printf("Key Pressed!\n");
+			}
 			break;
 
 			case ClientMessage:
 			{
-
 				if((Atom)event.xclient.data.l[0] == wm_delete_window)
-					{
-						loop = 0;
-					}
+				{
+					loop = 0;
+				}
+			}
 			break;
 			}
 		}
-	}
-	
+
 	XCloseDisplay(display);	
 }
 
@@ -94,15 +97,15 @@ int main(void)
 	term_window();
 
 //open slave device
-	int master_fd = posix_openpt(O_RDWR);//open pseudoterminal master device		
-	int key = unlockpt(master_fd);//unlocks master/slave pair
-	int slave_fd = grantpt(master_fd);//the real pseudoterm
-	
-	char buf = *(char*)malloc(sizeof(char)*64);
-	buf = 0;
-	int slave_name = ptsname_r(slave_fd, &buf,sizeof(buf));
+UNUSED int master_fd = posix_openpt(O_RDWR);//open pseudoterminal master device		
+UNUSED int key = unlockpt(master_fd);//unlocks master/slave pair
+UNUSED int slave_fd = grantpt(master_fd);//the real pseudoterm
 
-	int open_fd = forkpty(&master_fd, NULL, NULL, NULL);
+UNUSED char buf = *(char*)malloc(sizeof(char)*64);
+	buf = 0;
+UNUSED int slave_name = ptsname_r(slave_fd, &buf,sizeof(buf));
+
+UNUSED int open_fd = forkpty(&master_fd, NULL, NULL, NULL);
 	
 	return 0;
 }
