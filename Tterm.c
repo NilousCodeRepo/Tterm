@@ -10,103 +10,82 @@
 #include <X11/Xlib.h>
 #include <assert.h>
 
-#define KEY_ESCAPE 9
-
-bool xorg_exists(Display* display)
+//i only check the env var to not cause confusion when actually opening a connection to the server, i hope it is enough, if not, i will resolve.
+bool xorg_exists()
 {
 	char* disp_env_var = getenv("DISPLAY");
-	if(disp_env_var == NULL || display == NULL)
+	if(disp_env_var == NULL)
 		return false;
 
 	return true;
 }
 
-int term_window()
+//use: XSelectInput() if using XCreateWindow(), with the simple version is automatically set to InputOutput
+void term_window()
 {
-	Display* display = XOpenDisplay(NULL);
-	if(!xorg_exists(display))//TODO: check to see if it works
+	if(!xorg_exists())//TODO: check to see if it works
 	{
 		assert("FATAL ERROR: X server is NOT running\nor the 'DISPLAY' enviromental variable is not set properly");
 	}
+
+	void* DEFAULT = NULL;
+	//for more info check: tronche.com/gui/x/xlib/display/opening.html
+	Display* display = XOpenDisplay(DEFAULT);//returns opaque struct
+	int screen = XDefaultScreen(display);
 	
-	Window focused_display;
-	int current_focus;
-
-	//TODO: check if this works with second monitor
-	Display* focused = (Display*)XGetInputFocus(display, &focused_display, &current_focus);
-
-	Window window = XDefaultScreen(focused);
-	XWindowAttributes window_attr;//SEGFAULTS HERE FOR SURE
+	int ROOT_DEFAULT = XRootWindow(display, screen);
 	
-	display = XOpenDisplay((char*)focused);
-
-	Status attr = XGetWindowAttributes(display, window, &window_attr);
-
-	//TODO: SetWindowAttributes and XSelectInput()
-
-#if 0
-	int screen = DefaultScreen(display);
+	int x = 0;
+	int y = 0;
 	
-	XSetWindowAttributes attributes = {
-		.background_pixel = BlackPixel(display, screen),
-		.event_mask = KeyPressMask //DO NOT SET ExposureMask, it spawns TWO windows
-	};
-	//TODO: use XSelectInput()
+	unsigned int width = 100;
+	unsigned int height = 100;
+	
+	unsigned long border_width = 1;
+	unsigned long border = 0;
+	unsigned long BG = 0;
 
-	int x = 100;
-	int y = 100;
-	int w = 800;
-	int h = 600;
-	int border_w = 0;
+	//allocate and initialize memory for window(?) without drawing it
+	Window simple_window = XCreateSimpleWindow(display,ROOT_DEFAULT, x, y, width, height,
+																						 border_width, border, BG);
 
-	Window window = XCreateWindow(display,
-																RootWindow(display, screen),
-																x, y, w, h, border_w,
-																DefaultDepth(display, screen),
-																InputOutput,
-																DefaultVisual(display, screen),
-																CWBackPixel | CWEventMask, // same as attributes
-																&attributes);
+	int window_name = XStoreName(display, simple_window, "Tterm");
 
-	XStoreName(display, window, "Tterm");
+	Atom wm_delete_window = XInternAtom(display, "WM_DELETE_WINDOW", False);
+	
+	Status set_atom_protocols = XSetWMProtocols(display, simple_window, &wm_delete_window, 1);
 
-	GC gc = XCreateGC(display, window, 0, NULL);              // create graphic context
-	XSetForeground(display, gc, WhitePixel(display, screen));
-
-	//closing window event handler, theese are the events that i want to receive
-	//from the window manager(which is higher level than X so it has to handle
-	//the closing events)
-	Atom wm_delete_window = XInternAtom(display,"WM_DELETE_WINDOW", False);
-	XSetWMProtocols(display, window, &wm_delete_window, 1);
-
-	XMapWindow(display, window);
+	XMapWindow(display, simple_window);//map window to be drawn
 
 	XEvent event;
 
-	for (int loop = 1; loop; )
+	int loop = 1;
+	while(loop != 0)
 	{
+
 		XNextEvent(display, &event);
-
-		switch (event.type)
-		{	
+		switch(event.type)
+		{
 			case KeyPress:
+				if(event.xkey.keycode)
 				{
-					if (event.xkey.keycode == KEY_ESCAPE)
-						loop = 0;
-					break;
+					loop = 0;
 				}
+			break;
 
-			case ClientMessage:                                       
-				{ //event for closing window 
-					if ((Atom) event.xclient.data.l[0] == wm_delete_window) 
+			case ClientMessage:
+			{
+
+				if((Atom)event.xclient.data.l[0] == wm_delete_window)
+					{
 						loop = 0;
-					break;
-				}
+					}
+			break;
 			}
 		}
-
-	XCloseDisplay(display);//this is enougth, it handles everything
-#endif
+	}
+	
+	XCloseDisplay(display);	
 }
 
 
