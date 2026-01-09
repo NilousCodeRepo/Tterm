@@ -15,6 +15,7 @@
 //i only check the env var to not cause confusion when actually opening a connection to the server, i hope it is enough, if not, i will resolve.
 bool xorg_exists()
 {
+	//TODO: DOES NOT WORK(tested on termux, on xfce/termux it works)
 	char* disp_env_var = getenv("DISPLAY");
 	if(disp_env_var == NULL)
 		return false;
