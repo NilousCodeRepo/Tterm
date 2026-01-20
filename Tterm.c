@@ -1,5 +1,5 @@
 //TODO:try GLFW with #define GLFW_NO_API
-
+//TODO: check for GPU and if there is use glx to render
 #define _XOPEN_SOURCE 600
 #define _GNU_SOURCE
 
@@ -9,6 +9,7 @@
 #include <pty.h>
 #include <X11/Xlib.h>
 #include <assert.h>
+#include <sys/types.h>
 
 #define UNUSED __attribute__((unused))
 
@@ -49,7 +50,7 @@ void term_window()
 
 	//allocate and initialize memory for window(?) without drawing it
 	Window simple_window = XCreateSimpleWindow(display,ROOT_DEFAULT, x, y, width, height,
-																						 border_width, border_color, BG);
+                                               border_width, border_color, BG);
 
 	XEvent event = {0};
 	
@@ -94,20 +95,25 @@ void term_window()
 
 int main(void)
 {
-	term_window();
+    //term_window();
 
-//open slave device
-UNUSED int master_fd = posix_openpt(O_RDWR);//open pseudoterminal master device		
-UNUSED int key = unlockpt(master_fd);//unlocks master/slave pair
-UNUSED int slave_fd = grantpt(master_fd);//the real pseudoterm
+    int master_fd = posix_openpt(O_RDWR);//open pseudoterminal master device and create slave
+    printf("FD OF MASTER: %d\n", master_fd);
 
-UNUSED char buf = *(char*)malloc(sizeof(char)*64);
-	buf = 0;
-UNUSED int slave_name = ptsname_r(slave_fd, &buf,sizeof(buf));
+    int slave_fd = grantpt(master_fd);//the real pseudoterm
+    printf("CLOSED FD OF SLAVE: %d\n", slave_fd);
 
-UNUSED int open_fd = forkpty(&master_fd, NULL, NULL, NULL);
-	
-	return 0;
+    int key = unlockpt(master_fd);//unlocks master/slave pair
+    printf("KEY: %d\n", key);
+
+#if 0
+    char* process_to_open = ptsname(master_fd);//pass name of slave associate with master_fd to open
+    printf("NAME OF SLAVE TO OPEN: %s\n",process_to_open);
+   
+    int open_slave_fd = open(process_to_open, O_RDWR, "rw");//open the slave pty
+    printf("OPENED FD OF SLAVE: %d\n", open_slave_fd);
+#endif
+    return 0;
 }
 
 
