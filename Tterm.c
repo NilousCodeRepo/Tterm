@@ -10,6 +10,8 @@
 #include <X11/Xlib.h>
 #include <assert.h>
 #include <sys/types.h>
+#include <unistd.h>
+
 
 #define UNUSED __attribute__((unused))
 
@@ -93,26 +95,49 @@ void term_window()
 }
 
 
+/*
+ * A me serve creare un nuovo processo(?) con execv o qualcosa di simile
+ * quindi mi serve il PID dello slave(?)
+ * poi devo fare in modo renderizzare i caratteri su term_window(), usando gli eventi
+ * successivamente devo mandare quei comandi allo shell(bash) e stampare l'output
+ * quindi devi connettermi a stdin e stdout e stderr per eventuali cazzi
+*/
 int main(void)
 {
     //term_window();
+    
+    //open an unused master file descriptor for master pseduto-terminal 
+    int master_fd = posix_openpt(O_RDWR);//from /dev/pts/ptmx pseudo-term multiplexter 
+    
+    if(master_fd == -1)
+    {
+        perror("ERROR: Could not open master device\n");
+        return 1; 
+    }
 
-    int master_fd = posix_openpt(O_RDWR);//open pseudoterminal master device and create slave
-    printf("FD OF MASTER: %d\n", master_fd);
+    //it changes the ID of the slave to the real UID of the calling process, so Tterm in this case 
+    grantpt(master_fd);
+    unlockpt(master_fd); 
 
-    int slave_fd = grantpt(master_fd);//the real pseudoterm
-    printf("CLOSED FD OF SLAVE: %d\n", slave_fd);
-
-    int key = unlockpt(master_fd);//unlocks master/slave pair
-    printf("KEY: %d\n", key);
-
-#if 0
-    char* process_to_open = ptsname(master_fd);//pass name of slave associate with master_fd to open
-    printf("NAME OF SLAVE TO OPEN: %s\n",process_to_open);
+    // Once both the pseudoterminal master and slave are open
+    // the slave provides processes  with  an  interface that is identical to that of a real terminal.
    
-    int open_slave_fd = open(process_to_open, O_RDWR, "rw");//open the slave pty
-    printf("OPENED FD OF SLAVE: %d\n", open_slave_fd);
-#endif
+    char* slave_name = ptsname(master_fd); 
+    int slave_fd = open(slave_name, O_RDWR|O_NOCTTY);//offline man is wrong, return value > 0 is good
+    
+    if(slave_fd < 0)
+    {
+        perror("ERROR: Could not open slave device\n");
+        return -1;
+    }
+
+    char* slave_to_shell = getenv("SHELL");
+   
+   //TODO: with fork() spawn new process, so if i call it from a term, it opens a new window
+    while(true)
+        execv(slave_to_shell,NULL);
+
+
     return 0;
 }
 
