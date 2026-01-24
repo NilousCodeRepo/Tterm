@@ -11,7 +11,7 @@
 #include <assert.h>
 #include <sys/types.h>
 #include <unistd.h>
-
+#include <stdarg.h>
 
 #define UNUSED __attribute__((unused))
 
@@ -30,7 +30,7 @@ void term_window()
 	if(!xorg_exists())//TODO: check to see if it works
 	{
 		assert("FATAL ERROR: X server is NOT running\nor the 'DISPLAY' enviromental variable is not set properly");
-	}
+    }
 
 	void* DEFAULT = NULL;
 	//for more info check: tronche.com/gui/x/xlib/display/opening.html
@@ -54,24 +54,25 @@ void term_window()
 	Window simple_window = XCreateSimpleWindow(display,ROOT_DEFAULT, x, y, width, height,
                                                border_width, border_color, BG);
 
-	XEvent event = {0};
 	
 	XSelectInput(display,simple_window, KeyPressMask);//specifies the input that i want the window to receive
 
-	UNUSED int window_name = XStoreName(display, simple_window, "Tterm");
+UNUSED	int window_name = XStoreName(display, simple_window, "Tterm");
 
 	Atom wm_delete_window = XInternAtom(display, "WM_DELETE_WINDOW", False);
 	
-	UNUSED Status set_atom_protocols = XSetWMProtocols(display, simple_window, &wm_delete_window, 1);
+UNUSED    Status set_atom_protocols = XSetWMProtocols(display, simple_window, &wm_delete_window, 1);
 
 	XMapWindow(display, simple_window);//map window to be drawn
 
 	XSync(display, false);
+    
+    XEvent event;
 
-	int loop = 1;
-	while(loop != 0)
+    int loop = 1;
+    while(loop != 0)
 	{
-		XNextEvent(display, &event);
+        XNextEvent(display, &event);
 		switch(event.type)
 		{
 			case KeyPress:
@@ -87,11 +88,9 @@ void term_window()
 					loop = 0;
 				}
 			}
-			break;
-			}
-		}
-
-	XCloseDisplay(display);	
+        }
+	}
+    XCloseDisplay(display);	
 }
 
 
@@ -104,7 +103,7 @@ void term_window()
 */
 int main(void)
 {
-    //term_window();
+    term_window();
     
     //open an unused master file descriptor for master pseduto-terminal 
     int master_fd = posix_openpt(O_RDWR);//from /dev/pts/ptmx pseudo-term multiplexter 
@@ -120,8 +119,7 @@ int main(void)
     unlockpt(master_fd); 
 
     // Once both the pseudoterminal master and slave are open
-    // the slave provides processes  with  an  interface that is identical to that of a real terminal.
-   
+    // the slave provides a processe  with an interface that is identical to that of a real terminal.   
     char* slave_name = ptsname(master_fd); 
     int slave_fd = open(slave_name, O_RDWR|O_NOCTTY);//offline man is wrong, return value > 0 is good
     
@@ -132,13 +130,10 @@ int main(void)
     }
 
     char* slave_to_shell = getenv("SHELL");
-   
+    char* arg = "";
    //TODO: with fork() spawn new process, so if i call it from a term, it opens a new window
     while(true)
-        execv(slave_to_shell,NULL);
-
+        execlp(slave_to_shell, arg, NULL);
 
     return 0;
 }
-
-
