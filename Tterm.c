@@ -11,9 +11,17 @@
 #include <assert.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <stdarg.h>
+#include <sys/select.h>
 
 #define UNUSED __attribute__((unused))
+
+#define MAX_LINES 2048
+#define MAX_LINE_LENGTH 128 
+
+char lines[MAX_LINES][MAX_LINE_LENGTH];
+int num_lines = 0;
+int line_position = 0;
+char line_buffer[MAX_LINE_LENGTH];
 
 //i only check the env var to not cause confusion when actually opening a connection to the server, i hope it is enough, if not, i will resolve.
 bool xorg_exists()
@@ -25,8 +33,44 @@ bool xorg_exists()
 	return true;
 }
 
-void term_window()
-{
+void append_line_to_lines_buffer(const char* text) {
+    if (num_lines < MAX_LINES) {
+        snprintf(lines[num_lines++], MAX_LINE_LENGTH, "%s", text);
+    }
+}
+
+void escape_and_append(const char* input) {
+    char escaped[MAX_LINE_LENGTH * 4];//to accomodate escapes it is bigger
+    int j = 0;
+
+    for (int i = 0; input[i] != '\0' && j < MAX_LINE_LENGTH - 4; ++i) {
+        unsigned char c = input[i];
+        if (c == '\n') {
+            escaped[j++] = '\\';
+            escaped[j++] = 'n';
+        } else if (c == '\t') {
+            escaped[j++] = '\\';
+            escaped[j++] = 't';
+        } else if (c < 0x20 || c >= 0x7f) {
+            j += snprintf(&escaped[j], 5, "\\x%02x", c);
+        } else {
+            escaped[j++] = c;
+        }
+    }
+
+    escaped[j] = '\0';
+    append_line_to_lines_buffer(escaped);
+}
+
+/*
+ * A me serve creare un nuovo processo(?) con execv o qualcosa di simile
+ * quindi mi serve il PID dello slave(?)
+ * poi devo fare in modo renderizzare i caratteri su term_window(), usando gli eventi
+ * successivamente devo mandare quei comandi allo shell(bash) e stampare l'output
+ * quindi devi connettermi a stdin e stdout e stderr per eventuali cazzi
+*/
+int main(void)
+{   
 	if(!xorg_exists())//TODO: check to see if it works
 	{
 		assert("FATAL ERROR: X server is NOT running\nor the 'DISPLAY' enviromental variable is not set properly");
@@ -50,27 +94,27 @@ void term_window()
 	unsigned long border_color = 0;
 	unsigned long BG = 0;
 
-	//allocate and initialize memory for window(?) without drawing it
+	//allocate and initialize memory for window without drawing it
 	Window simple_window = XCreateSimpleWindow(display,ROOT_DEFAULT, x, y, width, height,
                                                border_width, border_color, BG);
 
 	
 	XSelectInput(display,simple_window, KeyPressMask);//specifies the input that i want the window to receive
 
-UNUSED	int window_name = XStoreName(display, simple_window, "Tterm");
+ 	int window_name = XStoreName(display, simple_window, "Tterm");
 
 	Atom wm_delete_window = XInternAtom(display, "WM_DELETE_WINDOW", False);
 	
-UNUSED    Status set_atom_protocols = XSetWMProtocols(display, simple_window, &wm_delete_window, 1);
+    Status set_atom_protocols = XSetWMProtocols(display, simple_window, &wm_delete_window, 1);
 
 	XMapWindow(display, simple_window);//map window to be drawn
 
 	XSync(display, false);
-    
-    XEvent event;
 
-    int loop = 1;
-    while(loop != 0)
+    XEvent event;
+    
+    int exit_flag = 1;
+    while(exit_flag != 0)
 	{
         XNextEvent(display, &event);
 		switch(event.type)
@@ -85,27 +129,13 @@ UNUSED    Status set_atom_protocols = XSetWMProtocols(display, simple_window, &w
 			{
 				if((Atom)event.xclient.data.l[0] == wm_delete_window)
 				{
-					loop = 0;
+					exit_flag = 0;
 				}
 			}
         }
 	}
-    XCloseDisplay(display);	
-}
 
-
-/*
- * A me serve creare un nuovo processo(?) con execv o qualcosa di simile
- * quindi mi serve il PID dello slave(?)
- * poi devo fare in modo renderizzare i caratteri su term_window(), usando gli eventi
- * successivamente devo mandare quei comandi allo shell(bash) e stampare l'output
- * quindi devi connettermi a stdin e stdout e stderr per eventuali cazzi
-*/
-int main(void)
-{
-    term_window();
-    
-    //open an unused master file descriptor for master pseduto-terminal 
+//open an unused master file descriptor for master pseduto-terminal 
     int master_fd = posix_openpt(O_RDWR);//from /dev/pts/ptmx pseudo-term multiplexter 
     
     if(master_fd == -1)
@@ -119,7 +149,7 @@ int main(void)
     unlockpt(master_fd); 
 
     // Once both the pseudoterminal master and slave are open
-    // the slave provides a processe  with an interface that is identical to that of a real terminal.   
+    // the slave provides a processe with an interface that is identical to that of a real terminal.   
     char* slave_name = ptsname(master_fd); 
     int slave_fd = open(slave_name, O_RDWR|O_NOCTTY);//offline man is wrong, return value > 0 is good
     
@@ -128,12 +158,45 @@ int main(void)
         perror("ERROR: Could not open slave device\n");
         return -1;
     }
-
-    char* slave_to_shell = getenv("SHELL");
-    char* arg = "";
-   //TODO: with fork() spawn new process, so if i call it from a term, it opens a new window
-    while(true)
+    else
+    {
+        //TODO: with fork() spawn child process
+        char* slave_to_shell = getenv("SHELL");//execute shell in a separete process
+        char* arg = "";
+    
         execlp(slave_to_shell, arg, NULL);
+    }
 
+   //TODO: i have to interract with events here, so i have to create an event handler 
+
+    bool loop = true;
+    const unsigned short BUF_SIZE = 256;
+    char buf[BUF_SIZE];
+
+    while(loop)
+    {
+        fd_set fds;
+        FD_ZERO(&fds);//clear fd
+        FD_SET(master_fd, &fds);//add new fd to master
+        struct timeval tv = {0,2000};//2ms 
+         
+        // reading the shell output from the primary file descriptor
+        // select() allows a program to monitor multiple file descriptors, waiting until one or more of the file descriptors become ready for some class of I/O operation "ready" for some class of I/O operations 
+       //write and except are NULL
+        if (select(master_fd + 1, &fds, NULL, NULL, &tv) > 0) {
+            ssize_t n = read(master_fd, buf, sizeof(buf) - 1);//read sizeof(buf) bytes to buf from master_fd
+
+            if (n > 0) {
+                buf[n] = '\0';//NULL temrinad string
+                escape_and_append(buf);
+            }
+        }
+
+        //TODO:event handler
+    }
+
+    XCloseDisplay(display);	
     return 0;
+
 }
+
