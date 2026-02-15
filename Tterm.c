@@ -77,7 +77,8 @@ int main(void)
     }
 
 	void* DEFAULT = NULL;
-	//for more info check: tronche.com/gui/x/xlib/display/opening.html
+	
+    //for more info check: tronche.com/gui/x/xlib/display/opening.html
 	Display* display = XOpenDisplay(DEFAULT);//returns opaque struct
 	int screen = XDefaultScreen(display);
 	
@@ -95,47 +96,25 @@ int main(void)
 	unsigned long BG = 0;
 
 	//allocate and initialize memory for window without drawing it
-	Window simple_window = XCreateSimpleWindow(display,ROOT_DEFAULT, x, y, width, height,
-                                               border_width, border_color, BG);
+	Window simple_window = XCreateSimpleWindow(display,
+                                               ROOT_DEFAULT, 
+                                               x, y, width, height,
+                                               border_width, 
+                                               border_color, 
+                                               BG);
 
 	
-	XSelectInput(display,simple_window, KeyPressMask);//specifies the input that i want the window to receive
+	XSelectInput(display, simple_window, KeyPressMask);//specifies the input type that X should report, if no make -> no report on input
 
  	int window_name = XStoreName(display, simple_window, "Tterm");
-
-	Atom wm_delete_window = XInternAtom(display, "WM_DELETE_WINDOW", False);
-	
-    Status set_atom_protocols = XSetWMProtocols(display, simple_window, &wm_delete_window, 1);
 
 	XMapWindow(display, simple_window);//map window to be drawn
 
 	XSync(display, false);
 
-    XEvent event;
-    
-    int exit_flag = 1;
-    while(exit_flag != 0)
-	{
-        XNextEvent(display, &event);
-		switch(event.type)
-		{
-			case KeyPress:
-			{
-				printf("Key Pressed!\n");
-			}
-			break;
-
-			case ClientMessage:
-			{
-				if((Atom)event.xclient.data.l[0] == wm_delete_window)
-				{
-					exit_flag = 0;
-				}
-			}
-        }
-	}
-
+#if 0
 //open an unused master file descriptor for master pseduto-terminal 
+
     int master_fd = posix_openpt(O_RDWR);//from /dev/pts/ptmx pseudo-term multiplexter 
     
     if(master_fd == -1)
@@ -160,19 +139,50 @@ int main(void)
     }
     else
     {
-        //TODO: with fork() spawn child process
         char* slave_to_shell = getenv("SHELL");//execute shell in a separete process
         char* arg = "";
     
         execlp(slave_to_shell, arg, NULL);
     }
+#endif
 
-   //TODO: i have to interract with events here, so i have to create an event handler 
+    int master_fd;  // primary file descriptor for the pseudo-terminal
+    pid_t pid;      // Process ID of the child process
+
+    // create a pseudo-terminal (pty)
+    pid = forkpty(&master_fd, NULL, NULL, NULL);
+    
+    if (pid == -1) {
+        perror("Error creating pseudo-terminal");
+        return 1;
+    }
+
+    // Execute the shell in the child process
+    if (pid == 0) {
+        // at this point, the child process is bound to the secondary end of the pty
+        // This means that stdin/stdout/stderr of the child process will be connected to the pty
+        // and the following code writes to stdout of the pty.
+        printf("Initializing the shell...\n");
+
+        // this replaces the child process completely with the shell set in the environment
+        execlp(getenv("SHELL"), getenv("SHELL"), NULL);
+
+        // If execlp fails, handle the error. Notice that if execlp succeeds, then this line will not be executed.
+        // because the current process image was replaced by the shell.
+        perror("execlp");
+        exit(1);
+    }
 
     bool loop = true;
     const unsigned short BUF_SIZE = 256;
     char buf[BUF_SIZE];
 
+    Atom wm_delete_window = XInternAtom(display, "WM_DELETE_WINDOW", False);
+    Status set_atom_protocols = XSetWMProtocols(display, simple_window, &wm_delete_window, 1);
+
+    XEvent event;
+    int exit_flag = 1;
+    
     while(loop)
     {
         fd_set fds;
@@ -192,7 +202,28 @@ int main(void)
             }
         }
 
-        //TODO:event handler
+        while(exit_flag != 0)
+        {
+            XNextEvent(display, &event);
+            switch(event.type)
+            {
+                case KeyPress:
+                    {
+                        printf("Key Pressed!\n");
+                    }
+                    break;
+
+                case ClientMessage:
+                    {
+                        if((Atom)event.xclient.data.l[0] == wm_delete_window)
+                        {
+                            exit_flag = 0;
+                            loop = false;
+                        }
+                    }
+            }
+        }
+
     }
 
     XCloseDisplay(display);	
