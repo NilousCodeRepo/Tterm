@@ -1,5 +1,7 @@
 //TODO:try GLFW with #define GLFW_NO_API
 //TODO: check for GPU and if there is use glx to render
+
+//TODO: WRITE THINGS TO TERMINAL
 #define _XOPEN_SOURCE 600
 #define _GNU_SOURCE
 
@@ -87,8 +89,8 @@ int main(void)
 	int x = 0;
 	int y = 0;
 	
-	unsigned int width = 100;
-	unsigned int height = 100;
+	unsigned int width = 800;
+	unsigned int height = 600;
 	
 	unsigned int border_width = 1;
 	
@@ -110,6 +112,9 @@ int main(void)
 
 	XMapWindow(display, simple_window);//map window to be drawn
 
+    Drawable d = simple_window;
+    GC graphical_ctx = XCreateGC(display, d, 0, NULL);//Segfaulted here, wtf is a Drawable? is a fucking window where you draw, what a shit lib
+    
 	XSync(display, false);
 
 #if 0
@@ -182,6 +187,8 @@ int main(void)
 
     XEvent event;
     int exit_flag = 1;
+   
+    XFontStruct* font = XLoadQueryFont(display, "URWGothic-DemiOblique.otf" );
     
     while(loop)
     {
@@ -221,12 +228,13 @@ int main(void)
                             loop = false;
                         }
                     }
+                    //TODO: write shit on screen
             }
         }
 
     }
-
-    XCloseDisplay(display);	
+    
+    XCloseDisplay(display);
     return 0;
 
 }
