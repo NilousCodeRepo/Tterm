@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <fcntl.h>//manipulate fds
 #include <stdlib.h>
+#include <string.h>
 #include <pty.h>
 #include <X11/Xlib.h>
 #include <assert.h>
@@ -16,14 +17,6 @@
 #include <sys/select.h>
 
 #define UNUSED __attribute__((unused))
-
-#define MAX_LINES 2048
-#define MAX_LINE_LENGTH 128 
-
-char lines[MAX_LINES][MAX_LINE_LENGTH];
-int num_lines = 0;
-int line_position = 0;
-char line_buffer[MAX_LINE_LENGTH];
 
 //i only check the env var to not cause confusion when actually opening a connection to the server, i hope it is enough, if not, i will resolve.
 bool xorg_exists()
@@ -34,36 +27,6 @@ bool xorg_exists()
 
 	return true;
 }
-
-void append_line_to_lines_buffer(const char* text) {
-    if (num_lines < MAX_LINES) {
-        snprintf(lines[num_lines++], MAX_LINE_LENGTH, "%s", text);
-    }
-}
-
-void escape_and_append(const char* input) {
-    char escaped[MAX_LINE_LENGTH * 4];//to accomodate escapes it is bigger
-    int j = 0;
-
-    for (int i = 0; input[i] != '\0' && j < MAX_LINE_LENGTH - 4; ++i) {
-        unsigned char c = input[i];
-        if (c == '\n') {
-            escaped[j++] = '\\';
-            escaped[j++] = 'n';
-        } else if (c == '\t') {
-            escaped[j++] = '\\';
-            escaped[j++] = 't';
-        } else if (c < 0x20 || c >= 0x7f) {
-            j += snprintf(&escaped[j], 5, "\\x%02x", c);
-        } else {
-            escaped[j++] = c;
-        }
-    }
-
-    escaped[j] = '\0';
-    append_line_to_lines_buffer(escaped);
-}
-
 /*
  * A me serve creare un nuovo processo(?) con execv o qualcosa di simile
  * quindi mi serve il PID dello slave(?)
@@ -106,7 +69,7 @@ int main(void)
                                                BG);
 
 	
-	XSelectInput(display, simple_window, KeyPressMask);//specifies the input type that X should report, if no make -> no report on input
+	XSelectInput(display, simple_window, KeyPressMask | ExposureMask);//specifies the input type that X should report, if no make -> no report on input
 
  	int window_name = XStoreName(display, simple_window, "Tterm");
 
@@ -178,62 +141,47 @@ int main(void)
         exit(1);
     }
 
-    bool loop = true;
-    const unsigned short BUF_SIZE = 256;
-    char buf[BUF_SIZE];
-
     Atom wm_delete_window = XInternAtom(display, "WM_DELETE_WINDOW", False);
     Status set_atom_protocols = XSetWMProtocols(display, simple_window, &wm_delete_window, 1);
 
     XEvent event;
     int exit_flag = 1;
+
+    unsigned long white = WhitePixel(display, screen);
+    unsigned long black = BlackPixel(display, screen);
+    
+    XSetBackground(display, graphical_ctx, black);
+    XSetForeground(display, graphical_ctx, white);
    
-    XFontStruct* font = XLoadQueryFont(display, "URWGothic-DemiOblique.otf" );
-    
-    while(loop)
+    while(exit_flag != 0)
     {
-        fd_set fds;
-        FD_ZERO(&fds);//clear fd
-        FD_SET(master_fd, &fds);//add new fd to master
-        struct timeval tv = {0,2000};//2ms 
-         
-        // reading the shell output from the primary file descriptor
-        // select() allows a program to monitor multiple file descriptors, waiting until one or more of the file descriptors become ready for some class of I/O operation "ready" for some class of I/O operations 
-       //write and except are NULL
-        if (select(master_fd + 1, &fds, NULL, NULL, &tv) > 0) {
-            ssize_t n = read(master_fd, buf, sizeof(buf) - 1);//read sizeof(buf) bytes to buf from master_fd
-
-            if (n > 0) {
-                buf[n] = '\0';//NULL temrinad string
-                escape_and_append(buf);
-            }
-        }
-
-        while(exit_flag != 0)
+        XNextEvent(display, &event);
+        switch(event.type)
         {
-            XNextEvent(display, &event);
-            switch(event.type)
-            {
-                case KeyPress:
-                    {
-                        printf("Key Pressed!\n");
-                    }
-                    break;
+            case KeyPress:
+                {
+                    printf("Key Pressed!\n");
+                }
+            break;
 
-                case ClientMessage:
+            case ClientMessage:
+                {
+                    if((Atom)event.xclient.data.l[0] == wm_delete_window)
                     {
-                        if((Atom)event.xclient.data.l[0] == wm_delete_window)
-                        {
-                            exit_flag = 0;
-                            loop = false;
-                        }
+                        exit_flag = 0;
                     }
-                    //TODO: write shit on screen
-            }
+                }
+            break;
+            
+            case Expose:
+                {
+                    char* msg = "STOP THIS NIGHTMARE";
+                    XDrawString(display, simple_window, graphical_ctx, 50, 50, msg, strlen(msg));
+                }
+            break;
         }
-
     }
-    
+
     XCloseDisplay(display);
     return 0;
 
