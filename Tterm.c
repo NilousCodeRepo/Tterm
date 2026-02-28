@@ -15,17 +15,10 @@ bool xorg_exists();
 Display* T_default_display();
 
 //check number of screens and return default root window
-int root_screen();
+Window root_screen();
 
 //Window initialitation. TODO: make it more elastic, check screen size and so on
 Window init_simple_window(Display* display);
-
-typedef struct grid
-{
-    int x;
-    int y;
-}grid;
-
 
 int main(UNUSED int ac, UNUSED char* av[])
 {
@@ -42,7 +35,7 @@ int main(UNUSED int ac, UNUSED char* av[])
     
     printf("AVAILABLE MONITORS COUNT: %d\n", XScreenCount(display));
 
-	XSelectInput(display, window, KeyPressMask | ExposureMask);//specifies the input type that X should report, if no make -> no report on input
+	XSelectInput(display, window, KeyPressMask );//specifies the input type that X should report, if no make -> no report on input
     
     UNUSED int window_name = XStoreName(display, window, "Tterm");
 	
@@ -66,6 +59,10 @@ int main(UNUSED int ac, UNUSED char* av[])
     Atom wm_delete_window = XInternAtom(display, "WM_DELETE_WINDOW", False);
     UNUSED Status set_atom_protocols = XSetWMProtocols(display, window, &wm_delete_window, 1);
     
+    int x = 20;
+    int y = 20;
+    int width = 800;
+
     while(running)//idk why event handler does not work
     {
         XNextEvent(display, &event);
@@ -76,10 +73,13 @@ int main(UNUSED int ac, UNUSED char* av[])
                 KeyCode key = event.xkey.keycode;
                 char* character = XKeysymToString( XKeycodeToKeysym(display, key, 0) );
             
-                case Expose:
-                {
-                    XDrawString(display, window, graphical_ctx, 50, 50, character, strlen(character));
-                }
+                    XDrawString(display, window, graphical_ctx, x, y, character, strlen(character));
+                    x += 5;
+                    if( y == width - 1)
+                    {
+                        y += 1;
+                        x = 20;
+                    }
             }
             break;
 
@@ -115,7 +115,7 @@ Display* T_default_display()
     return pd;
 }
 
-int root_screen()
+Window root_screen()
 {
     Display* d = T_default_display();
     int monitor_count = XScreenCount(d);
@@ -153,3 +153,19 @@ Window init_simple_window(Display* display)
                                   );
     return w;
 }
+
+/*void renderer(window_attributes)
+{
+    window_attributes.x
+    window_attributes.y
+    
+    grid.x = window_attributes.x /100
+    grid.y = window_attributes.y /100
+    grid.x[100] = 0
+    grid.y[100] = 0
+    
+    if(letter in grid.x[i])
+        move to next x
+
+}
+*/
